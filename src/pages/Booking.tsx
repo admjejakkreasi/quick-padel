@@ -64,15 +64,39 @@ const Booking = () => {
   const fetchBookedSlots = async () => {
     if (!selectedField || !selectedDate) return;
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("bookings")
-      .select("start_time")
+      .select("start_time, end_time, status")
       .eq("field_id", selectedField)
       .eq("booking_date", format(selectedDate, "yyyy-MM-dd"))
-      .neq("status", "canceled");
+      .eq("status", "paid");
 
-    if (data) {
-      setBookedSlots(data.map(b => b.start_time));
+    if (error) {
+      console.error("Error fetching booked slots:", error);
+      return;
+    }
+
+    if (data && data.length > 0) {
+      console.log("Booked slots data:", data); // untuk debugging
+      
+      const unavailableSlots = new Set<string>();
+      
+      data.forEach(booking => {
+        const startHour = parseInt(booking.start_time.split(":")[0]);
+        const endHour = parseInt(booking.end_time.split(":")[0]);
+        
+        // Menambahkan semua slot waktu antara start_time dan end_time
+        for (let hour = startHour; hour < endHour; hour++) {
+          const timeSlot = `${hour.toString().padStart(2, "0")}:00`;
+          unavailableSlots.add(timeSlot);
+        }
+      });
+      
+      const sortedSlots = Array.from(unavailableSlots).sort();
+      console.log("Processed unavailable slots:", sortedSlots); // untuk debugging
+      setBookedSlots(sortedSlots);
+    } else {
+      setBookedSlots([]);
     }
   };
 
@@ -181,6 +205,21 @@ const Booking = () => {
                     className="rounded-md border"
                     locale={id}
                   />
+                  {bookedSlots.length > 0 && (
+                    <div className="mt-4 rounded-md border border-yellow-200 bg-yellow-50 p-4">
+                      <p className="mb-2 font-medium text-yellow-800">Jam yang sudah dibooking:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {bookedSlots.sort().map((time) => (
+                          <span 
+                            key={time} 
+                            className="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-sm text-yellow-800"
+                          >
+                            {time}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
@@ -194,15 +233,13 @@ const Booking = () => {
                       required
                     >
                       <option value="">Pilih jam</option>
-                      {timeSlots.map((time) => (
-                        <option 
-                          key={time} 
-                          value={time}
-                          disabled={bookedSlots.includes(time)}
-                        >
-                          {time} {bookedSlots.includes(time) ? "(Sudah dibooking)" : ""}
-                        </option>
-                      ))}
+                      {timeSlots
+                        .filter(time => !bookedSlots.includes(time))
+                        .map((time) => (
+                          <option key={time} value={time}>
+                            {time}
+                          </option>
+                        ))}
                     </select>
                   </div>
 
